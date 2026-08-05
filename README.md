@@ -92,7 +92,7 @@ docker-compose up --build
 ## 📝 License
  - see the [LICENSE](LICENSE) file for details.
 
----
+-----
 
 ## 👥 Authors
 
