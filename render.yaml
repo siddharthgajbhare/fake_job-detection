@@ -1,4 +1,4 @@
-//aad new
+//aad some idea before upload 
 services:
   - type: web
     name: fake-job-detection-api
