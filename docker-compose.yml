@@ -1,4 +1,4 @@
-//ext
+//ext f
 version: '3.8'
 services:
   db:
