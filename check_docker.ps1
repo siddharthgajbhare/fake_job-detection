@@ -1,4 +1,3 @@
-//a
 
 # Check if Docker is running
 $dockerRunning = Get-Process docker -ErrorAction SilentlyContinue
