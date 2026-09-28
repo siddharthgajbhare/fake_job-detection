@@ -1,4 +1,4 @@
-//aaad somet
+//aaad someting
 services:
   - type: web
     name: fake-job-detection-api
