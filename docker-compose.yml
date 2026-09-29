@@ -1,36 +1,160 @@
+version: "3.8"
 
-version: '3.8'
 services:
+
+  # ==========================================
+  # MongoDB
+  # ==========================================
   db:
-    image: mongo:latest
-    volumes:
-      - mongo_data:/data/db
+    image: mongo:7
+    container_name: fake-job-mongodb
+    restart: unless-stopped
+
     ports:
       - "27017:27017"
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=password
 
-  backend:
-    build: ./backend
     volumes:
-      - ./backend:/app
+      - mongo_data:/data/db
+
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-password}
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --eval \"db.adminCommand('ping')\" --quiet"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+    networks:
+      - fake_job_network
+
+
+  # ==========================================
+  # Redis Cache
+  # ==========================================
+  redis:
+    image: redis:7-alpine
+    container_name: fake-job-redis
+    restart: unless-stopped
+
+    command: redis-server --appendonly yes
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - redis_data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - fake_job_network
+
+
+  # ==========================================
+  # Backend API
+  # ==========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+    container_name: fake-job-backend
+    restart: unless-stopped
+
     ports:
       - "8000:8000"
-    environment:
-      - MONGODB_URL=mongodb://admin:password@db:27017
-      - SECRET_KEY=changethis
-      - ALGORITHM=HS256
-      - ACCESS_TOKEN_EXPIRE_MINUTES=30
-    depends_on:
-      - db
 
+    volumes:
+      - ./backend:/app
+
+    environment:
+      MONGODB_URL: mongodb://${MONGO_USERNAME:-admin}:${MONGO_PASSWORD:-password}@db:27017/?authSource=admin
+
+      REDIS_URL: redis://redis:6379
+
+      SECRET_KEY: ${SECRET_KEY:-change-this-secret}
+
+      ALGORITHM: ${ALGORITHM:-HS256}
+
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-["http://localhost:3000"]}
+
+      PYTHONUNBUFFERED: "1"
+
+    depends_on:
+      db:
+        condition: service_healthy
+
+      redis:
+        condition: service_healthy
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -f http://localhost:8000/health || exit 1"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    networks:
+      - fake_job_network
+
+
+  # ==========================================
+  # Frontend
+  # ==========================================
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+
+    container_name: fake-job-frontend
+    restart: unless-stopped
+
     ports:
       - "3000:80"
-    depends_on:
-      - backend
 
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    networks:
+      - fake_job_network
+
+
+# ==========================================
+# Persistent Storage
+# ==========================================
 volumes:
+
   mongo_data:
+    driver: local
+
+  redis_data:
+    driver: local
+
+
+# ==========================================
+# Application Network
+# ==========================================
+networks:
+
+  fake_job_network:
+    driver: bridge
